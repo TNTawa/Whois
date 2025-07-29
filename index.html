@@ -1,0 +1,601 @@
+<!-- 请把备案查询的apikey换成自己的 API注册地址：www.apihz.cn -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TNT Whois 查询</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet"/>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            zihun: ['ZiHunBianTaoTi', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .glass {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .glass-btn {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.3s;
+      }
+      .glass-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+      }
+      .glass-footer {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .loading-spinner {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .notification {
+        animation: fadein 0.5s, fadeout 0.5s 2.5s;
+      }
+      @keyframes fadein {
+        from { bottom: 0; opacity: 0; }
+        to { bottom: 30px; opacity: 1; }
+      }
+      @keyframes fadeout {
+        from { bottom: 30px; opacity: 1; }
+        to { bottom: 0; opacity: 0; }
+      }
+    }
+  </style>
+  <style>
+    @font-face {
+      font-family: 'ZiHunBianTaoTi';
+      src: url('font.ttf') format('truetype');
+      font-display: swap;
+    }
+    body {
+      font-family: 'ZiHunBianTaoTi', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      overflow-x: hidden;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+    .raw-data {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  </style>
+</head>
+<body class="p-0 relative text-white">
+<!-- 背景图 -->
+<div id="background" class="fixed inset-0 z-0">
+  <img src="" alt="背景图" class="w-full h-full object-cover">
+</div>
+
+<!-- 主内容容器 -->
+<div class="container mx-auto px-4 py-8 relative z-10 max-w-6xl flex-grow">
+  <!-- 标题 -->
+  <header class="text-center mb-10 mt-6">
+    <h1 class="text-[clamp(2.5rem,5vw,4rem)] font-bold">TNT Whois 查询</h1>
+  </header>
+
+  <!-- 查询表单 -->
+  <div id="query-form-container" class="glass rounded-2xl p-6 md:p-8 mb-8">
+    <form id="whois-form" class="space-y-6">
+      <div class="space-y-2">
+        <label for="domain" class="block text-lg">域名查询</label>
+        <div class="relative">
+          <input
+                  type="text"
+                  id="domain"
+                  placeholder="例如: example.com"
+                  class="w-full px-5 py-3 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400/30 placeholder:text-white/60"
+          >
+          <div id="domain-error" class="hidden absolute -bottom-5 left-0 text-sm text-red-400">
+            <i class="fa fa-exclamation-circle mr-1"></i>请输入有效的域名
+          </div>
+        </div>
+      </div>
+
+      <button
+              type="submit"
+              class="glass-btn w-full text-white py-3 px-6 rounded-xl flex items-center justify-center gap-2"
+      >
+        <span>查询 WHOIS 信息</span>
+        <i class="fa fa-search"></i>
+      </button>
+    </form>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="loading" class="hidden glass rounded-2xl p-8 mb-8 text-center">
+    <div class="loading-spinner inline-block w-10 h-10 border-3 border-white/30 border-t-white rounded-full mb-4"></div>
+    <p class="text-lg">正在查询，请稍候...</p>
+  </div>
+
+  <!-- 结果展示 -->
+  <div id="results-container" class="hidden glass rounded-2xl p-6 md:p-8 mb-8">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold" id="result-domain-title">example.com 的信息</h2>
+      <div class="flex gap-3">
+        <button id="copy-results" class="glass-btn p-2 rounded-lg" title="复制结果">
+          <i class="fa fa-copy"></i>
+        </button>
+        <button id="toggle-raw" class="glass-btn p-2 rounded-lg" title="显示原始数据">
+          <i class="fa fa-code"></i>
+        </button>
+        <button id="new-query" class="glass-btn p-2 rounded-lg" title="新查询">
+          <i class="fa fa-refresh"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- WHOIS 核心信息 -->
+    <div id="whois-results" class="mb-8 space-y-6">
+      <h3 class="text-xl font-bold pb-2 border-b border-white/10">WHOIS 信息</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-3">
+          <div>
+            <span class="text-white/70 text-sm">域名</span>
+            <p id="result-domain" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">注册人</span>
+            <p id="result-owner" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">联系邮箱</span>
+            <p id="result-email" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">注册商</span>
+            <p id="registrar-name" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">注册商网址</span>
+            <p id="registrar-url" class="font-medium">-</p>
+          </div>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <span class="text-white/70 text-sm">注册时间</span>
+            <p id="result-creation-date" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">过期时间</span>
+            <p id="result-expiration-date" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">已注册天数</span>
+            <p id="result-creation-days" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">剩余有效天数</span>
+            <p id="result-valid-days" class="font-medium">-</p>
+          </div>
+          <div>
+            <span class="text-white/70 text-sm">域名状态</span>
+            <p id="result-domain-status" class="font-medium">-</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <span class="text-white/70 text-sm block mb-1">DNS 服务器</span>
+        <div id="result-dns" class="font-medium">-</div>
+      </div>
+
+      <div>
+        <span class="text-white/70 text-sm block mb-1">WHOIS 服务器</span>
+        <div id="result-whois-server" class="font-medium">-</div>
+      </div>
+    </div>
+
+    <!-- 注册商信息 -->
+    <div id="registrar-details" class="glass rounded-2xl p-6 mb-8 space-y-4">
+      <h3 class="text-xl font-bold pb-2 border-b border-white/10">注册商详细信息</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <span class="text-white/70 text-sm">注册商名称</span>
+          <p id="registrar-fullname" class="font-medium">-</p>
+        </div>
+        <div>
+          <span class="text-white/70 text-sm">IANA 编号</span>
+          <p id="registrar-iana-id" class="font-medium">-</p>
+        </div>
+        <div>
+          <span class="text-white/70 text-sm">滥用联系邮箱</span>
+          <p id="registrar-abuse-email" class="font-medium">-</p>
+        </div>
+        <div>
+          <span class="text-white/70 text-sm">滥用联系电话</span>
+          <p id="registrar-abuse-phone" class="font-medium">-</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 原始数据 -->
+    <div id="raw-data-container" class="hidden glass rounded-2xl p-6 mb-8">
+      <h3 class="text-xl font-bold pb-2 border-b border-white/10 mb-4">原始 WHOIS 数据</h3>
+      <pre id="raw-data" class="raw-data text-sm bg-black/30 p-4 rounded-lg max-h-96 overflow-auto"></pre>
+    </div>
+
+    <div class="mt-8 flex gap-4">
+      <button id="retry-query" class="glass-btn flex-1 py-3 rounded-xl">
+        <i class="fa fa-refresh mr-2"></i>重试查询
+      </button>
+      <button id="new-query-2" class="glass-btn flex-1 py-3 rounded-xl">
+        <i class="fa fa-plus mr-2"></i>新查询
+      </button>
+    </div>
+  </div>
+
+  <!-- 通知提示 -->
+  <div id="notification" class="hidden fixed bottom-0 left-1/2 transform -translate-x-1/2 z-50 glass px-6 py-3 rounded-t-xl notification">
+    <span id="notification-text"></span>
+  </div>
+</div>
+
+<!-- 页脚 -->
+<footer class="glass-footer w-full p-6 text-center text-white mt-auto">
+  <p>© 2025 TNT Whois 查询 | 版权所有</p>
+</footer>
+
+<script>
+  (function(d){
+    // 初始化背景图
+    function initBackground() {
+      const selectedImage = 'https://api.wudu.ltd/api/acg/';
+
+      const img = new Image();
+      img.src = selectedImage;
+      img.onload = function() {
+        elements.background.src = selectedImage;
+        adjustTextColor(selectedImage);
+        document.body.style.opacity = 1;
+      };
+
+      img.onerror = function() {
+        console.error('背景图加载失败，使用备用图片');
+        elements.background.src = 'https://cdn.hellotnt.cn/i/2025/07/28/xfeoia.png';
+        document.body.style.opacity = 1;
+      };
+    }
+
+    // 调整文字颜色
+    function adjustTextColor(imageUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = imageUrl;
+
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 100;
+        canvas.height = 100;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        let r = 0, g = 0, b = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          r += data[i];
+          g += data[i + 1];
+          b += data[i + 2];
+        }
+
+        const pixelCount = data.length / 4;
+        r = Math.floor(r / pixelCount);
+        g = Math.floor(g / pixelCount);
+        b = Math.floor(b / pixelCount);
+
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+        if (luminance > 0.6) {
+          elements.textElements.forEach(el => {
+            el.style.color = '#1a1a1a';
+            el.style.opacity = '0.9';
+          });
+        } else {
+          elements.textElements.forEach(el => {
+            el.style.color = 'white';
+            el.style.opacity = '0.9';
+          });
+        }
+      };
+    }
+
+    // DOM元素引用
+    const elements = {
+      form: d.getElementById('whois-form'),
+      domainInput: d.getElementById('domain'),
+      domainError: d.getElementById('domain-error'),
+      queryForm: d.getElementById('query-form-container'),
+      loading: d.getElementById('loading'),
+      results: d.getElementById('results-container'),
+      resultDomainTitle: d.getElementById('result-domain-title'),
+      resultDomain: d.getElementById('result-domain'),
+      resultOwner: d.getElementById('result-owner'),
+      resultEmail: d.getElementById('result-email'),
+      resultCreationDate: d.getElementById('result-creation-date'),
+      resultExpirationDate: d.getElementById('result-expiration-date'),
+      resultCreationDays: d.getElementById('result-creation-days'),
+      resultValidDays: d.getElementById('result-valid-days'),
+      resultDomainStatus: d.getElementById('result-domain-status'),
+      resultDns: d.getElementById('result-dns'),
+      resultWhoisServer: d.getElementById('result-whois-server'),
+      registrarName: d.getElementById('registrar-name'),
+      registrarUrl: d.getElementById('registrar-url'),
+      registrarFullname: d.getElementById('registrar-fullname'),
+      registrarIanaId: d.getElementById('registrar-iana-id'),
+      registrarAbuseEmail: d.getElementById('registrar-abuse-email'),
+      registrarAbusePhone: d.getElementById('registrar-abuse-phone'),
+      copyBtn: d.getElementById('copy-results'),
+      toggleRawBtn: d.getElementById('toggle-raw'),
+      rawDataContainer: d.getElementById('raw-data-container'),
+      rawData: d.getElementById('raw-data'),
+      newQueryBtns: [d.getElementById('new-query'), d.getElementById('new-query-2')],
+      retryQueryBtn: d.getElementById('retry-query'),
+      notification: d.getElementById('notification'),
+      notificationText: d.getElementById('notification-text'),
+      background: d.querySelector('#background img'),
+      textElements: d.querySelectorAll('h1, h2, h3, p, span, label, button, input::placeholder')
+    };
+
+    // 域名验证
+    function isValidDomain(domain) {
+      const domainRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z]{2,})+$/;
+      return domainRegex.test(domain);
+    }
+
+    // 显示通知
+    function showNotification(message) {
+      elements.notificationText.textContent = message;
+      elements.notification.classList.remove('hidden');
+      setTimeout(() => {
+        elements.notification.classList.add('hidden');
+      }, 3000);
+    }
+
+    // 解析原始数据中的注册商信息
+    function parseRegistrarDetails(rawData) {
+      const details = {
+        ianaId: '-',
+        abuseEmail: '-',
+        abusePhone: '-',
+        url: '-'
+      };
+
+      // 从原始数据中提取信息
+      if (rawData.includes('Registrar IANA ID:')) {
+        details.ianaId = rawData.split('Registrar IANA ID:')[1].split('\r\n')[0].trim() || '-';
+      }
+
+      if (rawData.includes('Registrar Abuse Contact Email:')) {
+        details.abuseEmail = rawData.split('Registrar Abuse Contact Email:')[1].split('\r\n')[0].trim() || '-';
+      }
+
+      if (rawData.includes('Registrar Abuse Contact Phone:')) {
+        details.abusePhone = rawData.split('Registrar Abuse Contact Phone:')[1].split('\r\n')[0].trim() || '-';
+      }
+
+      if (rawData.includes('Registrar URL:')) {
+        details.url = rawData.split('Registrar URL:')[1].split('\r\n')[0].trim() || '-';
+      }
+
+      return details;
+    }
+
+    // 查询WHOIS信息 - 使用新API
+    async function queryWhois(domain) {
+      try {
+        // 新API地址
+        const apiUrl = `https://api.whoiscx.com/whois/?domain=${encodeURIComponent(domain)}&raw=1`;
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`服务器响应错误: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status === 1) {
+          return data;
+        } else {
+          throw new Error('查询失败，未找到域名信息');
+        }
+      } catch (error) {
+        console.error('WHOIS查询错误:', error);
+        throw error;
+      }
+    }
+
+    // 获取有效的域名
+    function getValidDomain() {
+      const domain = elements.domainInput.value.trim();
+      if (!domain || !isValidDomain(domain)) {
+        elements.domainError.classList.remove('hidden');
+        return false;
+      }
+      elements.domainError.classList.add('hidden');
+      return domain;
+    }
+
+    // 执行查询
+    async function performQuery() {
+      const domain = getValidDomain();
+      if (!domain) return;
+
+      elements.queryForm.classList.add('hidden');
+      elements.loading.classList.remove('hidden');
+      elements.results.classList.add('hidden');
+      elements.rawDataContainer.classList.add('hidden');
+
+      try {
+        const whoisData = await queryWhois(domain);
+        const info = whoisData.data.info;
+
+        // 解析注册商详细信息
+        const registrarDetails = parseRegistrarDetails(whoisData.data.raw);
+
+        // 填充WHOIS结果
+        elements.resultDomainTitle.textContent = `${info.domain} 的信息`;
+        elements.resultDomain.textContent = info.domain || '-';
+        elements.resultOwner.textContent = info.registrant_name || '未公开';
+        elements.resultEmail.textContent = info.registrant_email || '未公开';
+        elements.registrarName.textContent = info.registrar_name || '-';
+        elements.registrarUrl.textContent = registrarDetails.url;
+        elements.registrarFullname.textContent = info.registrar_name || '-';
+        elements.registrarIanaId.textContent = registrarDetails.ianaId;
+        elements.registrarAbuseEmail.textContent = registrarDetails.abuseEmail;
+        elements.registrarAbusePhone.textContent = registrarDetails.abusePhone;
+
+        // 格式化日期显示
+        elements.resultCreationDate.textContent = formatDate(info.creation_time) || '-';
+        elements.resultExpirationDate.textContent = formatDate(info.expiration_time) || '-';
+
+        // 注册天数信息
+        elements.resultCreationDays.textContent = info.creation_days || '-';
+        elements.resultValidDays.textContent = info.valid_days || '-';
+
+        // 域名状态
+        elements.resultDomainStatus.textContent = info.domain_status ? info.domain_status.join('; ') : '-';
+
+        // DNS服务器
+        const dnsServers = info.name_server || [];
+        elements.resultDns.textContent = dnsServers.length > 0 ? dnsServers.join('; ') : '-';
+
+        // WHOIS服务器
+        elements.resultWhoisServer.textContent = info.whois_server || '-';
+
+        // 原始数据
+        elements.rawData.textContent = whoisData.data.raw || '无原始数据';
+
+        // 显示结果
+        elements.loading.classList.add('hidden');
+        elements.results.classList.remove('hidden');
+
+      } catch (error) {
+        showNotification(error.message || '查询失败，请重试');
+        elements.loading.classList.add('hidden');
+        elements.queryForm.classList.remove('hidden');
+      }
+    }
+
+    // 格式化日期
+    function formatDate(dateString) {
+      if (!dateString) return '-';
+
+      // 处理不同格式的日期字符串
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return dateString; // 无法解析时返回原始字符串
+      }
+
+      return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // 复制结果
+    function copyResults() {
+      let resultText = `域名: ${elements.resultDomain.textContent}\n` +
+              `注册人: ${elements.resultOwner.textContent}\n` +
+              `联系邮箱: ${elements.resultEmail.textContent}\n` +
+              `注册商: ${elements.registrarName.textContent}\n` +
+              `注册商网址: ${elements.registrarUrl.textContent}\n` +
+              `注册时间: ${elements.resultCreationDate.textContent}\n` +
+              `过期时间: ${elements.resultExpirationDate.textContent}\n` +
+              `已注册天数: ${elements.resultCreationDays.textContent}\n` +
+              `剩余有效天数: ${elements.resultValidDays.textContent}\n` +
+              `域名状态: ${elements.resultDomainStatus.textContent}\n` +
+              `DNS服务器: ${elements.resultDns.textContent}\n` +
+              `WHOIS服务器: ${elements.resultWhoisServer.textContent}\n\n` +
+              `注册商详细信息:\n` +
+              `注册商名称: ${elements.registrarFullname.textContent}\n` +
+              `IANA编号: ${elements.registrarIanaId.textContent}\n` +
+              `滥用联系邮箱: ${elements.registrarAbuseEmail.textContent}\n` +
+              `滥用联系电话: ${elements.registrarAbusePhone.textContent}`;
+
+      navigator.clipboard.writeText(resultText)
+              .then(() => showNotification('结果已复制到剪贴板'))
+              .catch(() => showNotification('复制失败，请手动复制'));
+    }
+
+    // 切换原始数据显示
+    function toggleRawData() {
+      elements.rawDataContainer.classList.toggle('hidden');
+      const icon = elements.toggleRawBtn.querySelector('i');
+      if (elements.rawDataContainer.classList.contains('hidden')) {
+        icon.className = 'fa fa-code';
+        elements.toggleRawBtn.title = '显示原始数据';
+      } else {
+        icon.className = 'fa fa-chevron-up';
+        elements.toggleRawBtn.title = '隐藏原始数据';
+      }
+    }
+
+    // 新查询
+    function newQuery() {
+      elements.results.classList.add('hidden');
+      elements.rawDataContainer.classList.add('hidden');
+      elements.queryForm.classList.remove('hidden');
+      elements.domainInput.value = '';
+      elements.domainInput.focus();
+    }
+
+    // 初始化事件监听
+    function initEvents() {
+      elements.form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        performQuery();
+      });
+
+      elements.retryQueryBtn.addEventListener('click', performQuery);
+      elements.copyBtn.addEventListener('click', copyResults);
+      elements.toggleRawBtn.addEventListener('click', toggleRawData);
+
+      elements.newQueryBtns.forEach(btn => {
+        btn.addEventListener('click', newQuery);
+      });
+    }
+
+    // 初始化
+    function init() {
+      initBackground();
+      initEvents();
+    }
+
+    // 启动应用
+    init();
+  })(document);
+</script>
+</body>
+</html>
